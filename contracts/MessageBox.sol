@@ -6,15 +6,36 @@ contract MessageBox {
 
     string public message;
     address public sender;
+    address public relay;
+    mapping(address => bool) public approvers;
 
-    function MessageBox(string initialMessage) public {
+    modifier onlyAuthorized() {
+        require(msg.sender == relay || checkMessageData(msg.sender));
+        _;
+    }
+
+    function MessageBox(string initialMessage, address _relayAddress) public {
         message = initialMessage;
+        relay = _relayAddress;
     }
 
-    function setMessage(string newMessage) public {
+    function setMessage(address claimedSender, string newMessage) public {
+        require(approvers[claimedSender]);
         message = newMessage;
-        sender = msg.sender;
+        sender = claimedSender;
     }
 
-}
+    function delegate(address claimedSender) public onlyAuthorized {
+        approvers[claimedSender] = true;
+    }
 
+    //Checks that address a is the first input in msg.data.
+    //Has very minimal gas overhead.
+    function checkMessageData(address a) private pure returns (bool t) {
+        if (msg.data.length < 36) return false;
+        assembly {
+            let mask := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+            t := eq(a, and(mask, calldataload(4)))
+        }
+    }
+}
